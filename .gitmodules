@@ -1,0 +1,3 @@
+[submodule "external/Embedded-Electronic-Control-Standard"]
+	path = external/Embedded-Electronic-Control-Standard
+	url = https://github.com/Kaede-Rei/Embedded-Electronic-Control-Standard.git
