@@ -1,10 +1,10 @@
-#include "stm32_hal_spi.h"
+#include "stm32_hal_uart.h"
 
 #include "main.h" // IWYU pragma: keep
 
 // ! ========================= 变 量 声 明 ========================= ! //
 
-extern SPI_HandleTypeDef hspi6;
+extern UART_HandleTypeDef huart1;
 
 // ! ========================= 私 有 函 数 声 明 ========================= ! //
 
@@ -12,8 +12,8 @@ extern SPI_HandleTypeDef hspi6;
 
 // ! ========================= 接 口 函 数 实 现 ========================= ! //
 
-bool spi_write(const uint8_t* data, uint32_t len) {
-    HAL_SPI_Transmit(&hspi6, data, (uint16_t)len, SPI_TIMEOUT);
+bool uart_write(const char* data, uint32_t len) {
+    HAL_UART_Transmit(&huart1, (uint8_t*)data, (uint16_t)len, UART_TIMEOUT);
 
     return true;
 }
