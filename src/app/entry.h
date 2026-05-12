@@ -1,6 +1,9 @@
 #ifndef _entry_h_
 #define _entry_h_
 
+// ! system ! //
+#include <assert.h>
+
 // ! app ! //
 
 
@@ -27,8 +30,8 @@
 
 // ! ========================= 接 口 变 量 / Typedef 声 明 ========================= ! //
 
-static uint8_t rgb_color_buffer[8 * RGB_LED_COLOR_BYTES];
-static uint8_t rgb_tx_buffer[8 * WS2812_RGB_LED_BITS_PER_PIXEL + 80];
+static uint8_t rgb_color_buffer[WS2812_RGB_LED_DEFAULT_PIXEL_COUNT * RGB_LED_COLOR_BYTES];
+static uint8_t rgb_tx_buffer[WS2812_RGB_LED_DEFAULT_PIXEL_COUNT * WS2812_RGB_LED_BITS_PER_PIXEL + WS2812_RGB_LED_DEFAULT_RESET_BYTES];
 
 static const RgbLedPortOps rgb_ops = {
     .write = spi_write,
@@ -40,19 +43,12 @@ static const RgbLedPortOps rgb_ops = {
  * @brief 程序初始化入口函数
  */
 static inline void entry_init(void) {
-    RgbLedConfig rgb_config = {
-        .ops = &rgb_ops,
-        .pixel_count = 8,
-        .color_buffer = rgb_color_buffer,
-        .color_buffer_size = sizeof(rgb_color_buffer),
-        .tx_buffer = rgb_tx_buffer,
-        .tx_buffer_size = sizeof(rgb_tx_buffer),
-        .reset_bytes = 80,
-    };
+    RgbLedConfig rgb_config;
     rgb_led_set_instance(&ws2812_rgb_led_instance);
-    rgb_led.init(&rgb_config);
+    assert(ws2812_rgb_led_make_config(&rgb_config, &rgb_ops, rgb_color_buffer, sizeof(rgb_color_buffer), rgb_tx_buffer, sizeof(rgb_tx_buffer)) == RGB_LED_STATUS_OK);
 
-    rgb_led.fill(255, 255, 255);
+    rgb_led.init(&rgb_config);
+    rgb_led.fill(0, 255, 255);
     rgb_led.show();
 }
 
