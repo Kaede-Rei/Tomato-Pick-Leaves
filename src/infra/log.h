@@ -6,6 +6,16 @@
 
 // ! ========================= 接 口 变 量 / Typedef 声 明 ========================= ! //
 
+/**
+ * @brief 日志输出缓冲区大小，单位 byte
+ */
+#define LOG_BUFFER_SIZE 160u
+
+/**
+ * @brief 日志异步输出队列深度
+ */
+#define LOG_QUEUE_DEPTH 4u
+
 #if defined(__GNUC__)
 /**
  * @brief 为日志格式化函数启用 printf 风格编译期检查
@@ -27,6 +37,8 @@ typedef enum {
     LOG_STATUS_PORT_ERROR,
     /** 尚未调用 log_init() 或 PortOps 未绑定 */
     LOG_STATUS_NOT_INITIALIZED,
+    /** 异步输出仍在发送上一条日志 */
+    LOG_STATUS_BUSY,
 } LogStatus;
 
 /**
@@ -71,6 +83,13 @@ typedef struct {
     LogLevel level;
     /** 是否输出 ANSI 颜色转义序列 */
     bool enable_color;
+    /**
+     * @brief true 表示 write() 返回后底层仍可能继续读取 data
+     *
+     * UART DMA 这类异步端口应设为 true，并在发送完成中断中调用 log_write_complete()
+     * 阻塞 UART、RTT、mock buffer 这类同步端口保持 false 即可
+     */
+    bool async_write;
 } LogConfig;
 
 // ! ========================= 接 口 函 数 声 明 ========================= ! //
@@ -88,6 +107,13 @@ LogStatus log_init(const LogConfig* config);
  * @return LogStatus 状态码
  */
 LogStatus log_set_level(LogLevel level);
+
+/**
+ * @brief 通知日志模块上一段异步输出已经完成
+ *
+ * 仅当 LogConfig.async_write 为 true 时需要调用，通常放在 UART DMA Tx complete 回调里
+ */
+void log_write_complete(void);
 
 /**
  * @brief 输出 info 级别日志

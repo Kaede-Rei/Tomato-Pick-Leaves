@@ -56,14 +56,17 @@ static inline void entry_init(void) {
         .ops = &log_ops,
         .level = LOG_LEVEL_INFO,
         .enable_color = true,
+        .async_write = true,
     };
     assert(log_init(&log_config) == LOG_STATUS_OK);
+    uart_register_tx_complete_callback(&huart1, log_write_complete);
 
     rgb_led.init(&rgb_config);
-    rgb_led.fill(0, 255, 255);
+    rgb_led.fill(0, 0, 0);
     rgb_led.show();
 
     log_info("System initialized successfully");
+    log_info("Welcome to Tomato Push Aside Leaves!");
 }
 
 /**
