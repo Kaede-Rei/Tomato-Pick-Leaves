@@ -1,5 +1,5 @@
-#ifndef SIX_DOF_ARM_KINE_H
-#define SIX_DOF_ARM_KINE_H
+#ifndef _six_dof_arm_kine_h_
+#define _six_dof_arm_kine_h_
 
 #include <stdint.h>
 

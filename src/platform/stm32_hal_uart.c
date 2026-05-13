@@ -11,12 +11,32 @@ static void(*uart_rx_complete_callback)(void) = NULL;
 
 // ! ========================= 接 口 函 数 实 现 ========================= ! //
 
-bool uart_write(const char* data, uint32_t len) {
+bool uart1_write(const char* data, uint32_t len) {
     if(data == NULL || len == 0 || len > UINT16_MAX) {
         return false;
     }
 
     return HAL_UART_Transmit_DMA(&huart1, (uint8_t*)data, (uint16_t)len) == HAL_OK;
+}
+
+bool uart10_write(const uint8_t* data, uint16_t len) {
+    if(data == NULL || len == 0 || len > UINT16_MAX) {
+        return false;
+    }
+
+    return HAL_UART_Transmit(&huart10, data, len, UART_TIMEOUT) == HAL_OK;
+}
+
+int uart10_read(uint8_t* data, uint16_t len) {
+    if(data == NULL || len == 0u) {
+        return 0;
+    }
+
+    if(HAL_UART_Receive(&huart10, data, len, UART_TIMEOUT) != HAL_OK) {
+        return 0;
+    }
+
+    return len;
 }
 
 void uart_register_tx_complete_callback(UART_HandleTypeDef* huart, void (*callback)(void)) {

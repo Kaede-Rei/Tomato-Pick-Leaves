@@ -10,4 +10,3 @@
 void assemble_init(void);
 
 #endif
-

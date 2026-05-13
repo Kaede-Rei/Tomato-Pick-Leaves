@@ -72,7 +72,7 @@ targets:
             LIB_FLAGS: ""
             output-format: elf
             remove-unused-input-sections: true
-        scatterFilePath: STM32H723VGTX_FLASH.ld
+        scatterFilePath: STM32H723VGTX_FLASH_USER.ld
         storageLayout:
           RAM: []
           ROM: []
