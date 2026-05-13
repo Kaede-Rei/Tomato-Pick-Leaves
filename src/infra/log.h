@@ -1,3 +1,76 @@
+/**
+ * @file log.h
+ * @brief 轻量级 printf 风格日志模块
+ *
+ * 本模块只依赖一个底层写接口 LogPortOps.write，可对接阻塞 UART、UART DMA、
+ * RTT、USB CDC、文件或 mock buffer；日志层负责格式化、级别过滤、可选 ANSI
+ * 颜色，以及异步输出时的缓冲区生命周期管理
+ *
+ * 最小同步用法：
+ *
+ * @code
+ * static bool board_log_write(const char* data, uint32_t len) {
+ *     return HAL_UART_Transmit(&huart1, (uint8_t*)data, (uint16_t)len, HAL_MAX_DELAY) == HAL_OK;
+ * }
+ *
+ * static const LogPortOps log_ops = {
+ *     .write = board_log_write,
+ * };
+ *
+ * void app_init(void) {
+ *     LogConfig config = {
+ *         .ops = &log_ops,
+ *         .level = LOG_LEVEL_INFO,
+ *         .enable_color = true,
+ *         .async_write = false,
+ *     };
+ *
+ *     log_init(&config);
+ *     log_info("system started");
+ * }
+ * @endcode
+ *
+ * UART DMA 异步用法：
+ *
+ * @code
+ * static bool board_log_write(const char* data, uint32_t len) {
+ *     return HAL_UART_Transmit_DMA(&huart1, (uint8_t*)data, (uint16_t)len) == HAL_OK;
+ * }
+ *
+ * void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart) {
+ *     if(huart == &huart1) {
+ *         log_write_complete();
+ *     }
+ * }
+ *
+ * void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart) {
+ *     if(huart == &huart1) {
+ *         log_write_complete();
+ *     }
+ * }
+ *
+ * void app_init(void) {
+ *     LogConfig config = {
+ *         .ops = &log_ops,
+ *         .level = LOG_LEVEL_INFO,
+ *         .enable_color = true,
+ *         .async_write = true,
+ *     };
+ *
+ *     log_init(&config);
+ *     log_info("system started");
+ * }
+ * @endcode
+ *
+ * 注意：
+ * - async_write=false 时，write() 必须在返回前完成对 data 的读取
+ * - async_write=true 时，write() 可在返回后继续读取 data，但发送完成或错误后
+ *   必须调用 log_write_complete()，否则队列不会继续发送
+ * - 异步模式内部带有小队列，连续多条日志会排队发送；队列满时返回 LOG_STATUS_BUSY
+ * - LOG_BUFFER_SIZE 控制单条日志最大长度，LOG_QUEUE_DEPTH 控制异步队列深度，
+ *   二者可在编译选项中覆盖
+ */
+
 #ifndef LOG_H
 #define LOG_H
 
