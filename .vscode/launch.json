@@ -8,7 +8,6 @@
             "name": "Debug: OpenOCD",
             "servertype": "openocd",
             "executable": "build/Debug/Pick_Leaves.elf",
-            "showDevDebugOutput": "raw",
             "runToEntryPoint": "main",
             "configFiles": [
                 "interface/stlink.cfg",

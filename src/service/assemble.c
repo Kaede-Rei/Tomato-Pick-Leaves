@@ -6,8 +6,8 @@
 // ! device ! //
 #include "rgb_led/rgb_led.h"
 #include "rgb_led/ws2812_rgb_led.h"
+#include "servo/ft_scs_servo.h"
 #include "servo/servo.h"
-#include "servo/sts3215_servo.h"
 
 // ! infra ! //
 #include "delay.h"
@@ -21,7 +21,7 @@
 
 static uint8_t rgb_color_buffer[WS2812_RGB_LED_DEFAULT_PIXEL_COUNT * RGB_LED_COLOR_BYTES];
 static uint8_t rgb_tx_buffer[WS2812_RGB_LED_DEFAULT_PIXEL_COUNT * WS2812_RGB_LED_BITS_PER_PIXEL + WS2812_RGB_LED_DEFAULT_RESET_BYTES]
-    __attribute__((section(".ram_d3"), aligned(32)));
+__attribute__((section(".ram_d3"), aligned(32)));
 
 static const RgbLedPortOps rgb_ops = {
     .write = spi_write,
@@ -51,7 +51,7 @@ void assemble_init(void) {
     delay_ms_init(HAL_GetTick);
     assemble_log();
     assemble_rgb_led();
-    // assemble_servo();
+    assemble_servo();
 
     delay_ms(500);
     log_info("System initialized successfully");
@@ -98,6 +98,7 @@ static void assemble_servo(void) {
         .endian = SERVO_ENDIAN_LITTLE,
     };
 
-    assert(servo_set_instance(&sts3215_servo_instance) == SERVO_STATUS_OK);
+    assert(uart10_enable_half_duplex() == true);
+    assert(servo_set_instance(&ft_scs_servo_common_instance) == SERVO_STATUS_OK);
     assert(servo.init(&servo_config) == SERVO_STATUS_OK);
 }
