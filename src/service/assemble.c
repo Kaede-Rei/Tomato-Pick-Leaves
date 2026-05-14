@@ -83,7 +83,7 @@ static void assemble_rgb_led(void) {
 
     assert(rgb_led.init(&rgb_config) == RGB_LED_STATUS_OK);
     spi_register_tx_complete_callback(&hspi6, assemble_rgb_led_write_complete);
-    rgb_led.fill(255u, 0u, 0u);
+    rgb_led.fill(0u, 0u, 0u);
     rgb_led.show();
 }
 

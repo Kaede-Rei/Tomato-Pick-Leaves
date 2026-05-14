@@ -27,7 +27,7 @@
 /**
  * @brief 从 PRESENT_POSITION_L 到 PRESENT_LOAD_H 的反馈读取长度
  */
-#define FT_SCS_FEEDBACK_LEN 6u
+#define FT_SCS_FEEDBACK_LEN ((uint8_t)(FT_SCS_SERVO_PRESENT_CURRENT_H - FT_SCS_SERVO_PRESENT_POSITION_L + 1u))
 
 /**
  * @brief 默认应答超时时间, 单位 ms
@@ -75,6 +75,11 @@ typedef struct {
     uint8_t last_error_code;
     ServoFeedback feedback;
     bool has_feedback;
+    uint8_t last_tx_id;
+    uint8_t last_tx_instruction;
+    uint8_t last_tx_params[FT_SCS_FRAME_MAX];
+    uint8_t last_tx_params_len;
+    bool has_last_tx;
 } FtScsServoContext;
 
 // ! ========================= 变 量 声 明 ========================= ! //
@@ -448,7 +453,10 @@ static ServoStatus ft_scs_common_init(const ServoConfig* config) {
     s_ctx.initialized = true;
     s_ctx.last_error_code = 0u;
     s_ctx.has_feedback = false;
+    s_ctx.has_last_tx = false;
+    s_ctx.last_tx_params_len = 0u;
     memset(&s_ctx.feedback, 0, sizeof(s_ctx.feedback));
+    memset(s_ctx.last_tx_params, 0, sizeof(s_ctx.last_tx_params));
 
     return SERVO_STATUS_OK;
 }
@@ -474,12 +482,12 @@ static ServoStatus ft_scs_common_set_speed(uint8_t id, float speed) {
     uint8_t torque_enable = 1u;
     int16_t speed_raw;
 
-    ServoStatus status = write_data(id, FT_SCS_SERVO_TORQUE_ENABLE, &torque_enable, 1u, FT_SCS_SERVO_INST_WRITE, false);
+    ServoStatus status = write_data(id, FT_SCS_SERVO_TORQUE_ENABLE, &torque_enable, 1u, FT_SCS_SERVO_INST_WRITE, true);
     if(status != SERVO_STATUS_OK) {
         return status;
     }
 
-    status = write_data(id, FT_SCS_SERVO_MODE, &mode, 1u, FT_SCS_SERVO_INST_WRITE, false);
+    status = write_data(id, FT_SCS_SERVO_MODE, &mode, 1u, FT_SCS_SERVO_INST_WRITE, true);
     if(status != SERVO_STATUS_OK) {
         return status;
     }
@@ -487,7 +495,7 @@ static ServoStatus ft_scs_common_set_speed(uint8_t id, float speed) {
     speed_raw = speed_rad_s_to_raw(speed);
     build_position_data(data, 0u, ft_scs_servo_signed_to_raw(speed_raw), FT_SCS_DEFAULT_ACC);
 
-    return write_data(id, FT_SCS_SERVO_ACC, data, sizeof(data), FT_SCS_SERVO_INST_WRITE, false);
+    return write_data(id, FT_SCS_SERVO_ACC, data, sizeof(data), FT_SCS_SERVO_INST_WRITE, true);
 }
 
 /**
@@ -500,12 +508,12 @@ static ServoStatus ft_scs_common_set_pos_spd(uint8_t id, float position, float v
     ServoStatus status;
     int16_t speed_raw;
 
-    status = write_data(id, FT_SCS_SERVO_TORQUE_ENABLE, &torque_enable, 1u, FT_SCS_SERVO_INST_WRITE, false);
+    status = write_data(id, FT_SCS_SERVO_TORQUE_ENABLE, &torque_enable, 1u, FT_SCS_SERVO_INST_WRITE, true);
     if(status != SERVO_STATUS_OK) {
         return status;
     }
 
-    status = write_data(id, FT_SCS_SERVO_MODE, &mode, 1u, FT_SCS_SERVO_INST_WRITE, false);
+    status = write_data(id, FT_SCS_SERVO_MODE, &mode, 1u, FT_SCS_SERVO_INST_WRITE, true);
     if(status != SERVO_STATUS_OK) {
         return status;
     }
@@ -515,7 +523,7 @@ static ServoStatus ft_scs_common_set_pos_spd(uint8_t id, float position, float v
     }
     speed_raw = speed_rad_s_to_raw(velocity);
     build_position_data(data, position_rad_to_raw(position), (uint16_t)speed_raw, FT_SCS_DEFAULT_ACC);
-    return write_data(id, FT_SCS_SERVO_ACC, data, sizeof(data), FT_SCS_SERVO_INST_WRITE, false);
+    return write_data(id, FT_SCS_SERVO_ACC, data, sizeof(data), FT_SCS_SERVO_INST_WRITE, true);
 }
 
 /**
@@ -526,7 +534,7 @@ static ServoStatus ft_scs_common_set_pos_spd_tor(uint8_t id, float position, flo
     ServoStatus status;
 
     split_u16(torque_to_raw(torque), &data[0], &data[1]);
-    status = write_data(id, FT_SCS_SERVO_TORQUE_LIMIT_L, data, sizeof(data), FT_SCS_SERVO_INST_WRITE, false);
+    status = write_data(id, FT_SCS_SERVO_TORQUE_LIMIT_L, data, sizeof(data), FT_SCS_SERVO_INST_WRITE, true);
     if(status != SERVO_STATUS_OK) {
         return status;
     }
@@ -725,12 +733,16 @@ static ServoStatus ft_scs_write_packet(uint8_t id, uint8_t instruction, const ui
         s_ctx.ops->flush_rx();
     }
 
-    if(s_ctx.ops->write(frame, frame_len) == false) {
-        return SERVO_STATUS_PORT_ERROR;
+    s_ctx.last_tx_id = id;
+    s_ctx.last_tx_instruction = instruction;
+    s_ctx.last_tx_params_len = params_len;
+    s_ctx.has_last_tx = true;
+    if(params_len > 0u) {
+        memcpy(s_ctx.last_tx_params, params, params_len);
     }
 
-    if(s_ctx.ops->delay_ms != 0) {
-        s_ctx.ops->delay_ms(1u);
+    if(s_ctx.ops->write(frame, frame_len) == false) {
+        return SERVO_STATUS_PORT_ERROR;
     }
 
     if(need_ack && id != FT_SCS_SERVO_BROADCAST_ID) {
@@ -794,16 +806,17 @@ static ServoStatus read_exact(uint8_t* data, uint16_t len) {
  * @brief 读取并解析状态帧
  */
 static ServoStatus read_status_packet(uint8_t expected_id, uint8_t* params, uint8_t params_cap, uint8_t* out_params_len, uint8_t* out_error) {
-    uint8_t byte = 0u;
-    uint8_t prev = 0u;
-    uint8_t head[3];
-    uint8_t rx_id;
+    uint8_t b;
+    uint8_t last;
+    uint8_t id;
     uint8_t len;
     uint8_t err;
     uint8_t param_len;
-    uint8_t rx_checksum;
-    uint8_t check_buf[FT_SCS_FRAME_MAX];
     uint8_t packet_params[FT_SCS_FRAME_MAX];
+    uint8_t rx_checksum;
+    uint8_t sum;
+    uint8_t i;
+    uint8_t skipped;
     uint32_t start;
     ServoStatus status;
 
@@ -812,41 +825,49 @@ static ServoStatus read_status_packet(uint8_t expected_id, uint8_t* params, uint
         return status;
     }
 
-    while(1) {
-        start = s_ctx.ops->now_ms();
-        prev = 0u;
-        while(1) {
-            int got = s_ctx.ops->read(&byte, 1u);
+    start = s_ctx.ops->now_ms();
+
+    while((s_ctx.ops->now_ms() - start) < s_ctx.timeout_ms) {
+        last = 0u;
+        skipped = 0u;
+
+        while((s_ctx.ops->now_ms() - start) < s_ctx.timeout_ms) {
+            int got = s_ctx.ops->read(&b, 1u);
             if(got == 1) {
-                if(prev == FT_SCS_HEADER && byte == FT_SCS_HEADER) {
+                if(last == FT_SCS_HEADER && b == FT_SCS_HEADER) {
                     break;
                 }
-                prev = byte;
-            }
-
-            if((s_ctx.ops->now_ms() - start) >= s_ctx.timeout_ms) {
-                return SERVO_STATUS_TIMEOUT;
+                last = b;
+                skipped++;
+                if(skipped > 10u) {
+                    return SERVO_STATUS_TIMEOUT;
+                }
             }
         }
 
-        status = read_exact(head, sizeof(head));
+        if((s_ctx.ops->now_ms() - start) >= s_ctx.timeout_ms) {
+            return SERVO_STATUS_TIMEOUT;
+        }
+
+        status = read_exact(&id, 1u);
+        if(status != SERVO_STATUS_OK) {
+            return status;
+        }
+        status = read_exact(&len, 1u);
+        if(status != SERVO_STATUS_OK) {
+            return status;
+        }
+        status = read_exact(&err, 1u);
         if(status != SERVO_STATUS_OK) {
             return status;
         }
 
-        rx_id = head[0];
-        len = head[1];
-        err = head[2];
-
-        if(expected_id != FT_SCS_SERVO_BROADCAST_ID && rx_id != expected_id) {
-            continue;
-        }
         if(len < 2u) {
-            continue;
+            return SERVO_STATUS_BUFFER_TOO_SMALL;
         }
 
         param_len = (uint8_t)(len - 2u);
-        if((uint16_t)(3u + param_len) > sizeof(check_buf) || param_len > sizeof(packet_params)) {
+        if(param_len > sizeof(packet_params)) {
             return SERVO_STATUS_BUFFER_TOO_SMALL;
         }
 
@@ -862,38 +883,47 @@ static ServoStatus read_status_packet(uint8_t expected_id, uint8_t* params, uint
             return status;
         }
 
-        check_buf[0] = rx_id;
-        check_buf[1] = len;
-        check_buf[2] = err;
-        if(param_len > 0u) {
-            memcpy(&check_buf[3], packet_params, param_len);
+        sum = (uint8_t)(id + len + err);
+        for(i = 0u; i < param_len; i++) {
+            sum = (uint8_t)(sum + packet_params[i]);
+        }
+        sum = (uint8_t)(~sum);
+        if(sum != rx_checksum) {
+            return SERVO_STATUS_CHECKSUM_ERROR;
         }
 
-        if(checksum(check_buf, (uint16_t)(3u + param_len)) != rx_checksum) {
+        if(s_ctx.has_last_tx &&
+            id == s_ctx.last_tx_id &&
+            err == s_ctx.last_tx_instruction &&
+            param_len == s_ctx.last_tx_params_len &&
+            is_echo_instruction(err, packet_params, param_len) &&
+            (param_len == 0u || memcmp(packet_params, s_ctx.last_tx_params, param_len) == 0)) {
             continue;
         }
 
-        if(is_echo_instruction(err, packet_params, param_len)) {
-            continue;
+        if(expected_id != FT_SCS_SERVO_BROADCAST_ID && id != expected_id) {
+            return SERVO_STATUS_ID_MISMATCH;
         }
-
         if(param_len > params_cap) {
             return SERVO_STATUS_BUFFER_TOO_SMALL;
         }
+
         if(param_len > 0u && params != 0) {
             memcpy(params, packet_params, param_len);
         }
-
         if(out_params_len != 0) {
             *out_params_len = param_len;
         }
         if(out_error != 0) {
             *out_error = err;
         }
-        s_ctx.last_error_code = err;
 
+        s_ctx.last_error_code = err;
+        s_ctx.has_last_tx = false;
         return SERVO_STATUS_OK;
     }
+
+    return SERVO_STATUS_TIMEOUT;
 }
 
 /**
@@ -916,13 +946,10 @@ static ServoStatus read_data(uint8_t id, uint8_t addr, uint8_t* data, uint8_t le
         return status;
     }
 
-    do {
-        status = read_status_packet(id, data, len, &rx_len, &error);
-        if(status != SERVO_STATUS_OK) {
-            return status;
-        }
-    } while(error == FT_SCS_SERVO_INST_READ && rx_len == sizeof(params) &&
-        data[0] == addr && data[1] == len);
+    status = read_status_packet(id, data, len, &rx_len, &error);
+    if(status != SERVO_STATUS_OK) {
+        return status;
+    }
 
     if(error != 0u) {
         return SERVO_STATUS_ERROR;
