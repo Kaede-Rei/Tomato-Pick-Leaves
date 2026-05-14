@@ -53,7 +53,7 @@ static inline void entry_init(void) {
 static inline void entry_loop(void) {
     static ms_t servo_task = 0;
     static ServoFeedback feedback = { 0 };
-    if(s_nb_delay_ms(&servo_task, 1000)) {
+    if(delay_nb_ms(&servo_task, 1000)) {
         ServoStatus status = servo.update_feedback(1, &feedback);
         if(status == SERVO_STATUS_OK) {
             log_info("Servo feedback - position: %.2f rad, speed: %.2f rad/s, torque: %.2f", feedback.position, feedback.speed, feedback.torque);
