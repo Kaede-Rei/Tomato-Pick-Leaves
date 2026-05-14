@@ -31,7 +31,7 @@ servo/
 
 - `position` 单位为 `rad`
 - `speed` 单位为 `rad/s`
-- `torque` 在 `ft_scs_servo` 中按 `0.0f` 到 `1.0f` 的归一化力矩或负载比例处理
+- `torque` 统一使用 `N*m`
 
 如果某类舵机缺少某个通用能力, 驱动应直接返回 `SERVO_STATUS_UNSUPPORTED`
 
@@ -94,18 +94,20 @@ static bool servo_bus_write(const uint8_t* data, uint16_t len);
 static int servo_bus_read(uint8_t* data, uint16_t len);
 static uint32_t board_now_ms(void);
 static void board_delay_ms(uint32_t ms);
+static void servo_bus_flush_rx(void);
 
 static const ServoPortOps servo_ops = {
     .write = servo_bus_write,
     .read = servo_bus_read,
     .now_ms = board_now_ms,
     .delay_ms = board_delay_ms,
+    .flush_rx = servo_bus_flush_rx,
 };
 
 void device_servo_init(void) {
     ServoConfig config = {
         .ops = &servo_ops,
-        .timeout_ms = 20u,
+        .timeout_ms = 100u,
         .retry_count = 0u,
         .endian = SERVO_ENDIAN_LITTLE,
     };
@@ -164,7 +166,7 @@ ft_scs_servo.action(FT_SCS_SERVO_BROADCAST_ID);
 
 速度原始值按 `4096` count/s 与 `2*pi` rad/s 互转
 
-力矩或负载按 SCS 原始 `1000` 满量程归一化
+力矩或负载按 SCS 原始 `1000` 满量程映射到 STS3215 约 `2.94 N*m`
 
 ## 安全建议
 

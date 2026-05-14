@@ -65,7 +65,7 @@ typedef enum {
  * @param error_code 最近一次应答帧中的原始错误码
  * @param position 当前位置, 单位 rad
  * @param speed 当前速度, 单位 rad/s
- * @param torque 当前扭矩或负载, 具体量纲由驱动定义
+ * @param torque 当前扭矩或负载估计, 单位 N*m
  */
 typedef struct {
     uint8_t id;
@@ -103,6 +103,10 @@ typedef struct {
      * @param ms 延时时间, 单位 ms
      */
     void (*delay_ms)(uint32_t ms);
+    /**
+     * @brief 可选的接收缓冲区清空函数, 发送新指令前调用
+     */
+    void (*flush_rx)(void);
 } ServoPortOps;
 
 /**
@@ -158,7 +162,7 @@ typedef struct {
      * @param id 舵机 ID
      * @param position 目标位置, 单位 rad
      * @param velocity 目标速度, 单位 rad/s
-     * @param torque 保持扭矩或负载限制, 具体量纲由驱动定义
+     * @param torque 保持扭矩或负载限制, 单位 N*m
      * @return 状态码
      */
     ServoStatus(*set_pos_spd_tor)(uint8_t id, float position, float velocity, float torque);
@@ -177,7 +181,7 @@ typedef struct {
     /**
      * @brief 从本地反馈缓存获取最近解析的扭矩
      * @param id 舵机 ID
-     * @return 最近解析的扭矩或负载值
+     * @return 最近解析的扭矩或负载估计, 单位 N*m
      */
     float (*get_torque)(uint8_t id);
     /**
@@ -239,7 +243,7 @@ ServoStatus servo_set_pos_spd(uint8_t id, float position, float velocity);
  * @param id 舵机 ID
  * @param position 目标位置, 单位 rad
  * @param velocity 目标速度, 单位 rad/s
- * @param torque 保持扭矩或负载限制, 具体量纲由驱动定义
+ * @param torque 保持扭矩或负载限制, 单位 N*m
  * @return 状态码
  */
 ServoStatus servo_set_pos_spd_tor(uint8_t id, float position, float velocity, float torque);
@@ -261,7 +265,7 @@ float servo_get_speed(uint8_t id);
 /**
  * @brief 从本地反馈缓存获取最近解析的扭矩
  * @param id 舵机 ID
- * @return 最近解析的扭矩或负载值
+ * @return 最近解析的扭矩或负载估计, 单位 N*m
  */
 float servo_get_torque(uint8_t id);
 

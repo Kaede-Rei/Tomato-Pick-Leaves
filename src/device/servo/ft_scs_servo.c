@@ -15,9 +15,14 @@
 #define FT_SCS_FRAME_MAX 128u
 
 /**
- * @brief 从 GOAL_POSITION_L 到 GOAL_SPEED_H 的控制数据长度
+ * @brief 从 ACC 到 GOAL_SPEED_H 的控制数据长度
  */
-#define FT_SCS_POS_PACKET_LEN 6u
+#define FT_SCS_POS_PACKET_LEN 7u
+
+/**
+ * @brief 默认加速度原始值
+ */
+#define FT_SCS_DEFAULT_ACC 50u
 
 /**
  * @brief 从 PRESENT_POSITION_L 到 PRESENT_LOAD_H 的反馈读取长度
@@ -27,7 +32,7 @@
 /**
  * @brief 默认应答超时时间, 单位 ms
  */
-#define FT_SCS_DEFAULT_TIMEOUT_MS 20u
+#define FT_SCS_DEFAULT_TIMEOUT_MS 100u
 
 /**
  * @brief 位置换算比例, 每圈原始计数
@@ -36,13 +41,20 @@
 
 /**
  * @brief 速度换算比例, 每秒一圈对应的原始计数
+ *
+ * STS/SCS 速度单位约为 0.0146 rpm/count, 因此一圈每秒约等于 4096 count.
  */
 #define FT_SCS_SPEED_RAW_PER_REV_S 4096.0f
 
 /**
- * @brief 扭矩换算比例, 原始满量程值
+ * @brief STS3215 满量程扭矩估计, 单位 N*m
  */
-#define FT_SCS_TORQUE_RAW_FULL_SCALE 1000.0f
+#define FT_SCS_TORQUE_NM_FULL_SCALE 2.94f
+
+/**
+ * @brief 负载寄存器原始满量程值
+ */
+#define FT_SCS_LOAD_RAW_FULL_SCALE 1000.0f
 
 /**
  * @brief 弧度换算使用的 2pi 常量
@@ -110,7 +122,7 @@ static ServoStatus ft_scs_common_set_pos_spd(uint8_t id, float position, float v
  * @param id 舵机 ID
  * @param position 目标位置, 单位 rad
  * @param velocity 目标速度, 单位 rad/s
- * @param torque 保持扭矩比例, 范围 0.0 到 1.0
+ * @param torque 保持扭矩或负载限制, 单位 N*m
  * @return 状态码
  */
 static ServoStatus ft_scs_common_set_pos_spd_tor(uint8_t id, float position, float velocity, float torque);
@@ -132,7 +144,7 @@ static float ft_scs_common_get_speed(uint8_t id);
 /**
  * @brief 获取缓存的扭矩
  * @param id 舵机 ID
- * @return 扭矩比例, 范围 -1.0 到 1.0
+ * @return 扭矩或负载估计, 单位 N*m
  */
 static float ft_scs_common_get_torque(uint8_t id);
 
@@ -267,7 +279,7 @@ static ServoStatus read_data(uint8_t id, uint8_t addr, uint8_t* data, uint8_t le
 static ServoStatus write_data(uint8_t id, uint8_t addr, const uint8_t* data, uint8_t len, uint8_t instruction, bool need_ack);
 
 /**
- * @brief 构造位置加时间加速度控制数据
+ * @brief 构造加速度, 位置, 时间和速度控制数据
  * @param data 输出缓冲区, 长度至少为 FT_SCS_POS_PACKET_LEN
  * @param position_raw 目标原始位置
  * @param speed_raw 目标原始速度
@@ -335,16 +347,16 @@ static int16_t speed_rad_s_to_raw(float speed);
 static float raw_to_speed_rad_s(int16_t raw);
 
 /**
- * @brief 将归一化扭矩转换为原始寄存器值
- * @param torque 扭矩比例, 期望范围 0.0 到 1.0
+ * @brief 将 N*m 扭矩限制转换为原始寄存器值
+ * @param torque 扭矩或负载限制, 单位 N*m
  * @return 原始扭矩计数
  */
 static uint16_t torque_to_raw(float torque);
 
 /**
- * @brief 将原始带符号负载转换为归一化扭矩
+ * @brief 将原始带符号负载转换为 N*m 扭矩估计
  * @param raw 原始带符号负载值
- * @return 扭矩比例, 范围 -1.0 到 1.0
+ * @return 扭矩或负载估计, 单位 N*m
  */
 static float raw_to_torque(int16_t raw);
 
@@ -473,11 +485,9 @@ static ServoStatus ft_scs_common_set_speed(uint8_t id, float speed) {
     }
 
     speed_raw = speed_rad_s_to_raw(speed);
-    split_u16(0u, &data[0], &data[1]);
-    split_u16(0u, &data[2], &data[3]);
-    split_u16(ft_scs_servo_signed_to_raw(speed_raw), &data[4], &data[5]);
+    build_position_data(data, 0u, ft_scs_servo_signed_to_raw(speed_raw), FT_SCS_DEFAULT_ACC);
 
-    return write_data(id, FT_SCS_SERVO_GOAL_POSITION_L, data, sizeof(data), FT_SCS_SERVO_INST_WRITE, false);
+    return write_data(id, FT_SCS_SERVO_ACC, data, sizeof(data), FT_SCS_SERVO_INST_WRITE, false);
 }
 
 /**
@@ -504,8 +514,8 @@ static ServoStatus ft_scs_common_set_pos_spd(uint8_t id, float position, float v
         velocity = -velocity;
     }
     speed_raw = speed_rad_s_to_raw(velocity);
-    build_position_data(data, position_rad_to_raw(position), (uint16_t)speed_raw, 0u);
-    return write_data(id, FT_SCS_SERVO_GOAL_POSITION_L, data, sizeof(data), FT_SCS_SERVO_INST_WRITE, false);
+    build_position_data(data, position_rad_to_raw(position), (uint16_t)speed_raw, FT_SCS_DEFAULT_ACC);
+    return write_data(id, FT_SCS_SERVO_ACC, data, sizeof(data), FT_SCS_SERVO_INST_WRITE, false);
 }
 
 /**
@@ -710,6 +720,10 @@ static ServoStatus ft_scs_write_packet(uint8_t id, uint8_t instruction, const ui
         memcpy(&frame[5], params, params_len);
     }
     frame[5u + params_len] = checksum(frame + 2u, (uint16_t)(3u + params_len));
+
+    if(s_ctx.ops->flush_rx != 0) {
+        s_ctx.ops->flush_rx();
+    }
 
     if(s_ctx.ops->write(frame, frame_len) == false) {
         return SERVO_STATUS_PORT_ERROR;
@@ -940,14 +954,13 @@ static ServoStatus write_data(uint8_t id, uint8_t addr, const uint8_t* data, uin
 }
 
 /**
- * @brief 构造位置加时间加速度控制数据
+ * @brief 构造加速度, 位置, 时间和速度控制数据
  */
 static void build_position_data(uint8_t* data, uint16_t position_raw, uint16_t speed_raw, uint8_t acc) {
-    (void)acc;
-
-    split_u16(position_raw, &data[0], &data[1]);
-    split_u16(0u, &data[2], &data[3]);
-    split_u16(speed_raw, &data[4], &data[5]);
+    data[0] = acc;
+    split_u16(position_raw, &data[1], &data[2]);
+    split_u16(0u, &data[3], &data[4]);
+    split_u16(speed_raw, &data[5], &data[6]);
 }
 
 /**
@@ -1073,7 +1086,7 @@ static float raw_to_speed_rad_s(int16_t raw) {
 }
 
 /**
- * @brief 将归一化扭矩转换为原始寄存器值
+ * @brief 将 N*m 扭矩限制转换为原始寄存器值
  */
 static uint16_t torque_to_raw(float torque) {
     float raw;
@@ -1081,17 +1094,17 @@ static uint16_t torque_to_raw(float torque) {
     if(torque < 0.0f) {
         torque = -torque;
     }
-    if(torque > 1.0f) {
-        torque = 1.0f;
+    if(torque > FT_SCS_TORQUE_NM_FULL_SCALE) {
+        torque = FT_SCS_TORQUE_NM_FULL_SCALE;
     }
 
-    raw = torque * FT_SCS_TORQUE_RAW_FULL_SCALE;
+    raw = (torque * FT_SCS_LOAD_RAW_FULL_SCALE) / FT_SCS_TORQUE_NM_FULL_SCALE;
     return (uint16_t)(raw + 0.5f);
 }
 
 /**
- * @brief 将原始带符号负载转换为归一化扭矩
+ * @brief 将原始带符号负载转换为 N*m 扭矩估计
  */
 static float raw_to_torque(int16_t raw) {
-    return (float)raw / FT_SCS_TORQUE_RAW_FULL_SCALE;
+    return ((float)raw * FT_SCS_TORQUE_NM_FULL_SCALE) / FT_SCS_LOAD_RAW_FULL_SCALE;
 }

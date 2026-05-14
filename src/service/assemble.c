@@ -36,6 +36,7 @@ static const ServoPortOps servo_ops = {
     .read = uart10_read,
     .now_ms = HAL_GetTick,
     .delay_ms = delay_ms,
+    .flush_rx = uart10_flush_rx,
 };
 
 // ! ========================= 私 有 函 数 声 明 ========================= ! //
@@ -93,7 +94,7 @@ static void assemble_rgb_led_write_complete(void) {
 static void assemble_servo(void) {
     ServoConfig servo_config = {
         .ops = &servo_ops,
-        .timeout_ms = 20u,
+        .timeout_ms = 100u,
         .retry_count = 0u,
         .endian = SERVO_ENDIAN_LITTLE,
     };

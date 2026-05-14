@@ -39,6 +39,12 @@ int uart10_read(uint8_t* data, uint16_t len) {
     return len;
 }
 
+void uart10_flush_rx(void) {
+    uint8_t discard;
+
+    while(HAL_UART_Receive(&huart10, &discard, 1u, 0u) == HAL_OK) { }
+}
+
 void uart_register_tx_complete_callback(UART_HandleTypeDef* huart, void (*callback)(void)) {
     if(huart == &huart1) {
         uart_tx_complete_callback = callback;
