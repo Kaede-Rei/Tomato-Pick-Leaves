@@ -42,8 +42,8 @@ static inline void entry_init(void) {
     assemble_init();
     log_info("Welcome to Tomato Push Aside Leaves!");
 
-    // servo.set_speed(1, 6.28f);
-    servo.set_pos_spd(1, 3.14f, 3.14f);
+    servo.set_speed(1, 3.14f);
+    // servo.set_pos_spd(1, 3.14f, 3.14f);
     // servo.set_pos_spd_tor(1, 0.0f, 0.5f, 0.2f);
 }
 

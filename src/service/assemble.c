@@ -98,7 +98,6 @@ static void assemble_servo(void) {
         .endian = SERVO_ENDIAN_LITTLE,
     };
 
-    assert(uart10_enable_half_duplex() == true);
     assert(servo_set_instance(&ft_scs_servo_common_instance) == SERVO_STATUS_OK);
     assert(servo.init(&servo_config) == SERVO_STATUS_OK);
 }
