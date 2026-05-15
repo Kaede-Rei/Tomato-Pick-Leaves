@@ -42,9 +42,9 @@ static inline void entry_init(void) {
     assemble_init();
     log_info("Welcome to Tomato Push Aside Leaves!");
 
-    // servo.set_speed(1, 1.57f);
+    servo.set_speed(1, 1.57f);
     // servo.set_pos_spd(1, 3.14f, 1.57f);
-    servo.set_pos_spd_tor(1, 1.57f, 1.57f, 1.0f);
+    // servo.set_pos_spd_tor(1, 1.57f, 1.57f, 1.0f);
 }
 
 /**
@@ -53,10 +53,10 @@ static inline void entry_init(void) {
 static inline void entry_loop(void) {
     static ms_t servo_task = 0;
     static ServoFeedback feedback = { 0 };
-    if(delay_nb_ms(&servo_task, 1000)) {
+    if(delay_nb_ms(&servo_task, 100)) {
         ServoStatus status = servo.update_feedback(1, &feedback);
         if(status == SERVO_STATUS_OK) {
-            log_info("Servo feedback - position: %.2f rad, speed: %.2f rad/s, torque: %.2f", feedback.position, feedback.speed, feedback.torque);
+            log_vofa(servo.get_position(1), servo.get_speed(1), servo.get_torque(1));
         }
         else {
             log_error("Failed to update servo feedback: %s", servo.status_str(status));
